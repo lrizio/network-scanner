@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network Scanner</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    body { background: #0d1117; }
+    .card { background: #161b22; border-color: #30363d; }
+    .card-header { background: #1c2128; border-color: #30363d; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .label { color: #8b949e; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+    .ports-wrap { max-height: 260px; overflow: auto; }
+    .ports-wrap table { font-size: .85rem; margin: 0; }
+    .ports-wrap thead th { position: sticky; top: 0; background: #1c2128; }
+    .pulse { animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .35; } }
+    .stat { font-size: 1.6rem; font-weight: 600; line-height: 1; }
+  </style>
+</head>
+<body>
+<nav class="navbar border-bottom border-secondary-subtle mb-4">
+  <div class="container-xl">
+    <span class="navbar-brand mb-0 h1"><i class="bi bi-radar text-success me-2"></i>Network Scanner</span>
+    <div class="d-flex gap-2 small align-items-center">
+      <a href="/guide" target="_blank" class="link-secondary me-2"><i class="bi bi-book"></i> User Guide</a>
+      <span id="adminBadge" class="badge text-bg-secondary">checking...</span>
+      <span id="nmapBadge" class="badge text-bg-secondary">nmap ?</span>
+    </div>
+  </div>
+</nav>
+
+<main class="container-xl pb-5">
+  <div id="alerts"></div>
+
+  <!-- Scan controls -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <form id="scanForm" class="row g-3 align-items-end">
+        <div class="col-12 col-md-5">
+          <label for="cidr" class="form-label label mb-1">Target range (CIDR)</label>
+          <input id="cidr" class="form-control mono" placeholder="192.168.1.0/24" spellcheck="false" autocomplete="off" required>
+        </div>
+        <div class="col-12 col-md-4">
+          <label for="profile" class="form-label label mb-1">Scan depth</label>
+          <select id="profile" class="form-select"></select>
+        </div>
+        <div class="col-12 col-md-3 d-flex gap-2">
+          <button id="startBtn" type="submit" class="btn btn-success flex-fill"><i class="bi bi-play-fill"></i> Start Scan</button>
+          <button id="stopBtn" type="button" class="btn btn-outline-danger" disabled><i class="bi bi-stop-fill"></i> Stop</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Live status -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+        <span id="phaseBadge" class="badge text-bg-secondary fs-6"><i class="bi bi-circle-fill me-1"></i><span id="phaseText">Idle</span></span>
+        <span id="statusMsg" class="text-secondary flex-grow-1">Ready.</span>
+        <span id="elapsed" class="mono text-secondary small"></span>
+      </div>
+      <div class="progress" style="height: 8px;">
+        <div id="bar" class="progress-bar bg-success" style="width: 0%"></div>
+      </div>
+      <div class="row text-center mt-3 g-2">
+        <div class="col"><div class="stat" id="statHosts">0</div><div class="label">Hosts</div></div>
+        <div class="col"><div class="stat" id="statDone">0</div><div class="label">Inspected</div></div>
+        <div class="col"><div class="stat" id="statPorts">0</div><div class="label">Open ports</div></div>
+        <div class="col"><div class="stat" id="statPct">0%</div><div class="label">Progress</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+    <h2 class="h5 mb-0 me-auto">Results</h2>
+    <input id="filter" type="search" class="form-control form-control-sm" style="max-width: 280px;" placeholder="Filter by IP, MAC, vendor, OS, service...">
+    <button id="exportBtn" class="btn btn-sm btn-outline-secondary" disabled><i class="bi bi-download"></i> Export JSON</button>
+  </div>
+  <div id="results" class="row g-3"></div>
+  <p id="empty" class="text-secondary text-center py-5">No results yet. Enter a range and start a scan.</p>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let last = null;          // last status payload
+let lastRender = "";      // avoids re-rendering identical results (keeps scroll positions)
+let polling = false;
+
+async function api(path, body) {
+  const opts = body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  };
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+function showAlert(text, kind = "danger") {
+  $("alerts").innerHTML = `<div class="alert alert-${kind} alert-dismissible fade show" role="alert">
+    ${esc(text)}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+}
+
+/* ---------- initial info ---------- */
+async function loadInfo() {
+  try {
+    const info = await api("/api/info");
+    $("cidr").value ||= info.default_cidr;
+    $("profile").innerHTML = Object.entries(info.profiles)
+      .map(([k, label]) => `<option value="${esc(k)}" ${k === "standard" ? "selected" : ""}>${esc(label)}</option>`).join("");
+    const a = $("adminBadge");
+    a.className = "badge " + (info.admin ? "text-bg-success" : "text-bg-warning");
+    a.textContent = info.admin ? "Administrator" : "Not elevated";
+    a.title = info.admin ? "" : "ARP discovery and OS detection need Administrator/root.";
+    const n = $("nmapBadge");
+    n.className = "badge " + (info.nmap_version ? "text-bg-success" : "text-bg-danger");
+    n.textContent = info.nmap_version ? `nmap ${info.nmap_version}` : "nmap not found";
+    if (!info.nmap_version) showAlert("nmap was not found. Put the 'nmap' folder next to the app, or install it from https://nmap.org.");
+    else if (!info.npcap) showAlert("Npcap (packet driver) is not installed, so ARP discovery will not work. Install it from https://npcap.com and restart the app.", "warning");
+  } catch (e) { showAlert(e.message); }
+}
+
+/* ---------- rendering ---------- */
+const PHASE_STYLE = {
+  Idle: "secondary", Starting: "info", "Discovery Phase": "info", "Deep Inspection": "primary",
+  Complete: "success", Cancelled: "warning", Error: "danger",
+};
+const DEVICE_STATE = {
+  discovered: ["secondary", "Queued"], inspecting: ["primary", "Inspecting"],
+  done: ["success", "Done"], failed: ["danger", "Failed"],
+};
+
+function renderStatus(s) {
+  const running = s.state === "running" || s.state === "cancelling";
+  const phase = running && s.phase === "Starting" ? "Scanning" : s.phase;
+  const label = running && !phase.endsWith("...") ? phase + "..." : phase;
+  $("phaseText").textContent = label;
+  $("phaseBadge").className = `badge fs-6 text-bg-${PHASE_STYLE[s.phase] || "info"}`;
+  $("phaseBadge").firstElementChild.classList.toggle("pulse", running);
+  $("statusMsg").textContent = s.error ? `${s.message}` : s.message;
+  $("bar").style.width = s.progress + "%";
+  $("bar").classList.toggle("progress-bar-striped", running);
+  $("bar").classList.toggle("progress-bar-animated", running);
+  $("startBtn").disabled = running;
+  $("stopBtn").disabled = s.state !== "running";
+
+  const devs = s.devices || [];
+  $("statHosts").textContent = devs.length;
+  $("statDone").textContent = devs.filter((d) => d.state === "done" || d.state === "failed").length;
+  $("statPorts").textContent = devs.reduce((n, d) => n + d.ports.length, 0);
+  $("statPct").textContent = s.progress + "%";
+  $("elapsed").textContent = s.started
+    ? `${Math.round(((s.finished || Date.now() / 1000) - s.started))}s elapsed` : "";
+  $("exportBtn").disabled = !devs.length;
+
+  const warn = (s.warnings || []).map((w) => `<div>${esc(w)}</div>`).join("");
+  if (warn) $("alerts").innerHTML = `<div class="alert alert-warning">${warn}</div>`;
+}
+
+function matches(d, q) {
+  if (!q) return true;
+  const hay = [d.ip, d.mac, d.vendor, d.hostname, d.os,
+    ...d.ports.map((p) => `${p.port} ${p.service} ${p.product} ${p.version}`)].join(" ").toLowerCase();
+  return hay.includes(q);
+}
+
+/* URL of a port's web page, or null if the port is not a web service */
+function webUrl(d, p) {
+  const svc = (p.service || "").toLowerCase();
+  const web = (/http/.test(svc) && !svc.startsWith("ncacn")) ||
+    (!svc && [80, 443, 8000, 8080, 8443, 8888].includes(p.port));
+  if (!web || p.protocol !== "tcp") return null;
+  const tls = /https|ssl/.test(svc) || [443, 8443, 9443].includes(p.port);
+  const defaultPort = tls ? 443 : 80;
+  return `${tls ? "https" : "http"}://${d.ip}${p.port === defaultPort ? "" : ":" + p.port}/`;
+}
+
+function webLink(url, text) {
+  return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="link-info">${text}</a>`;
+}
+
+function webLinks(d) {
+  const urls = d.ports.map((p) => webUrl(d, p)).filter(Boolean);
+  if (!urls.length) return "";
+  return `<div class="col-12"><div class="label">Web page</div><div class="d-flex flex-wrap gap-2">` +
+    urls.map((u) => `<span class="badge text-bg-dark border border-info">${webLink(u,
+      `<i class="bi bi-box-arrow-up-right me-1"></i>${esc(u.replace(/\/$/, ""))}`)}</span>`).join("") +
+    `</div></div>`;
+}
+
+function portsTable(d) {
+  if (!d.ports.length) {
+    const msg = d.state === "failed" ? esc(d.error)
+      : d.state === "done" ? "No open ports found." : "Waiting for deep inspection...";
+    return `<div class="text-secondary small p-3">${msg}</div>`;
+  }
+  const rows = d.ports.map((p) => {
+    const ver = [p.product, p.version, p.extrainfo && `(${p.extrainfo})`].filter(Boolean).join(" ");
+    const url = webUrl(d, p);
+    const link = url ? ` ${webLink(url, '<i class="bi bi-box-arrow-up-right" title="Open web page"></i>')}` : "";
+    return `<tr><td class="mono">${p.port}/${esc(p.protocol)}${link}</td>
+      <td><span class="badge text-bg-success">${esc(p.state)}</span></td>
+      <td>${esc(p.service) || "-"}</td><td class="text-secondary">${esc(ver) || "-"}</td></tr>`;
+  }).join("");
+  return `<div class="ports-wrap"><table class="table table-sm table-dark table-borderless align-middle">
+    <thead><tr><th>Port</th><th>State</th><th>Service</th><th>Version</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function deviceCard(d) {
+  const [cls, text] = DEVICE_STATE[d.state] || ["secondary", d.state];
+  const osText = d.os ? esc(d.os) + (d.os_accuracy ? ` <span class="text-secondary">(${d.os_accuracy}%)</span>` : "") : "-";
+  const field = (name, val) => `<div class="col-6"><div class="label">${name}</div><div class="text-break">${val || "-"}</div></div>`;
+  return `<div class="col-12 col-lg-6 col-xxl-4"><div class="card h-100">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="mono fw-semibold"><i class="bi bi-pc-display me-2 text-success"></i>${esc(d.ip)}</span>
+      <span class="badge text-bg-${cls} ${d.state === "inspecting" ? "pulse" : ""}">${text}</span>
+    </div>
+    <div class="card-body pb-2"><div class="row g-2">
+      ${field("MAC", d.mac ? `<span class="mono">${esc(d.mac)}</span>` : "")}
+      ${field("Manufacturer", esc(d.vendor))}
+      ${field("Hostname", esc(d.hostname))}
+      ${field("Likely OS", d.os ? osText : "")}
+      ${webLinks(d)}
+    </div></div>
+    <div class="border-top border-secondary-subtle">
+      <div class="label px-3 pt-2">Open ports (${d.ports.length})</div>${portsTable(d)}
+    </div></div></div>`;
+}
+
+function renderResults() {
+  if (!last) return;
+  const q = $("filter").value.trim().toLowerCase();
+  const shown = (last.devices || []).filter((d) => matches(d, q));
+  const html = shown.map(deviceCard).join("");
+  $("empty").classList.toggle("d-none", (last.devices || []).length > 0);
+  if (html !== lastRender) { $("results").innerHTML = html; lastRender = html; }
+}
+
+/* ---------- polling ---------- */
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+    for (;;) {
+      last = await api("/api/status");
+      renderStatus(last);
+      renderResults();
+      if (last.state !== "running" && last.state !== "cancelling") break;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  } catch (e) { showAlert("Lost connection to the scanner: " + e.message); }
+  finally { polling = false; }
+}
+
+/* ---------- events ---------- */
+$("scanForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  $("alerts").innerHTML = "";
+  $("startBtn").disabled = true;
+  lastRender = "";
+  try {
+    await api("/api/scan", { cidr: $("cidr").value, profile: $("profile").value });
+    poll();
+  } catch (e) { showAlert(e.message); $("startBtn").disabled = false; }
+});
+
+$("stopBtn").addEventListener("click", async () => {
+  $("stopBtn").disabled = true;
+  try { await api("/api/cancel", {}); } catch (e) { showAlert(e.message); }
+});
+
+$("filter").addEventListener("input", renderResults);
+
+$("exportBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(last, null, 2)], { type: "application/json" });
+  const a = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(blob), download: `scan-${last.cidr.replace("/", "_")}.json`,
+  });
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+loadInfo();
+poll();   // resume display if a scan is already running / finished
+</script>
+</body>
+</html>
