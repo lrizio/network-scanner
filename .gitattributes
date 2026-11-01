@@ -1,0 +1,2 @@
+# store the packaged build byte-for-byte (no CRLF conversion)
+build/** -text

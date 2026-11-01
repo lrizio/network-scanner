@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Scanner - User Guide</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --dim:#8b949e; --accent:#3fb950; --warn:#d29922; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#ffffff; --panel:#f6f8fa; --line:#d0d7de; --text:#1f2328; --dim:#59636e; --accent:#1a7f37; --warn:#9a6700; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 2rem; margin: 0 0 4px; }
+  h2 { font-size: 1.3rem; margin-top: 2.4rem; padding-bottom: .3rem; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  p.sub { color: var(--dim); margin-top: 0; }
+  code, kbd { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px;
+    font: .9em ui-monospace,Consolas,monospace; }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; }
+  pre code { border: 0; padding: 0; background: none; }
+  .note, .warn { border-left: 4px solid var(--accent); background: var(--panel); padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 1rem 0; }
+  .warn { border-color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .95rem; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); }
+  nav { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 18px; margin: 1.5rem 0; }
+  nav ol { margin: 0; padding-left: 1.2rem; columns: 2; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Network Scanner - User Guide</h1>
+<p class="sub">Find every device on your network, what it is, and which services it exposes.</p>
+
+<div class="warn"><strong>Use responsibly.</strong> Only scan networks you own or have explicit permission to test.
+Scanning other people's networks may be illegal.</div>
+
+<nav><ol>
+  <li><a href="#what">What it does</a></li>
+  <li><a href="#requirements">Requirements</a></li>
+  <li><a href="#install">Setting up</a></li>
+  <li><a href="#run">Starting the app</a></li>
+  <li><a href="#scan">Running a scan</a></li>
+  <li><a href="#results">Reading the results</a></li>
+  <li><a href="#limits">Limits &amp; safety rules</a></li>
+  <li><a href="#trouble">Troubleshooting</a></li>
+  <li><a href="#cli">Command-line options</a></li>
+</ol></nav>
+
+<h2 id="what">1. What it does</h2>
+<p>Network Scanner runs a two-step scan and shows the results in a web dashboard on your own computer:</p>
+<ol>
+  <li><strong>Discovery</strong> - quickly finds live devices on your network using ARP, which also reveals each device's MAC address and manufacturer.</li>
+  <li><strong>Deep inspection</strong> - uses Nmap to find each device's open ports, the software and version behind them, its hostname, and a best guess of its operating system.</li>
+</ol>
+<p>Nothing leaves your computer. The dashboard is only reachable from the PC running the app.</p>
+
+<h2 id="requirements">2. Requirements</h2>
+<table>
+  <tr><th>Item</th><th>Details</th></tr>
+  <tr><td>Windows 10 / 11 (64-bit)</td><td>The app is a single <code>NetworkScanner.exe</code>; Python is <em>not</em> needed.</td></tr>
+  <tr><td>Npcap</td><td>Free Windows packet driver, needed for ARP discovery and OS detection. Download from <a href="https://npcap.com">npcap.com</a> (also included in the official Nmap installer). Install once; no reboot is usually required.</td></tr>
+  <tr><td>Nmap</td><td>Already included in the <code>nmap</code> folder next to the exe. Keep that folder beside <code>NetworkScanner.exe</code>. If it is missing, the app uses a system-installed Nmap instead.</td></tr>
+  <tr><td>Administrator rights</td><td>The exe asks for them automatically (Windows "Yes/No" prompt). Without them, OS detection is disabled.</td></tr>
+  <tr><td>Web browser</td><td>Any modern browser. The dashboard uses Bootstrap from the internet for styling; this guide works offline.</td></tr>
+</table>
+<div class="note">Microsoft Visual C++ Redistributable (2015-2022) is needed by Nmap. Most PCs already have it; if Nmap fails to start, install it from Microsoft.</div>
+
+<h2 id="install">3. Setting up</h2>
+<ol>
+  <li>Copy the whole <strong>build</strong> folder anywhere you like (for example <code>C:\Tools\NetworkScanner</code>). Keep <code>NetworkScanner.exe</code> and the <code>nmap</code> folder together.</li>
+  <li>Install <strong>Npcap</strong> from <a href="https://npcap.com">npcap.com</a> if you have not already.</li>
+  <li>If Windows SmartScreen or your antivirus warns about the exe, that is because it is unsigned and packaged with PyInstaller. Choose <em>More info -&gt; Run anyway</em>, or add an exclusion for the folder.</li>
+</ol>
+
+<h2 id="run">4. Starting the app</h2>
+<ol>
+  <li>Double-click <code>NetworkScanner.exe</code> and accept the Administrator prompt.</li>
+  <li>A black console window appears and prints a link such as <code>http://127.0.0.1:5000</code>. Your browser opens it automatically; if not, <kbd>Ctrl</kbd>+click the link.</li>
+  <li>Leave the console window open while you use the dashboard. <strong>Close the window to quit.</strong></li>
+</ol>
+<p>If port 5000 is busy the app picks the next free one and prints the correct link.</p>
+
+<h2 id="scan">5. Running a scan</h2>
+<ol>
+  <li><strong>Target range</strong> - enter the network in CIDR form. The box is pre-filled with your own network (for example <code>192.168.1.0/24</code>, meaning 192.168.1.1 - 254). Use <code>192.168.1.50/32</code> to scan one device.</li>
+  <li><strong>Scan depth</strong>:
+    <table>
+      <tr><th>Option</th><th>Ports checked</th><th>Typical time per device</th></tr>
+      <tr><td>Quick</td><td>Top 100</td><td>Seconds</td></tr>
+      <tr><td>Standard</td><td>Top 1000</td><td>Under a minute</td></tr>
+      <tr><td>Full</td><td>All 65,535</td><td>Several minutes</td></tr>
+    </table></li>
+  <li>Press <strong>Start Scan</strong>. The status panel shows the current phase (<em>Discovery Phase</em>, <em>Deep Inspection</em>), a progress bar and live counters. Device cards appear as soon as they are found and fill in as each device is inspected.</li>
+  <li><strong>Stop</strong> cancels the remaining devices. Devices already being inspected finish first.</li>
+</ol>
+
+<h2 id="results">6. Reading the results</h2>
+<table>
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td>IP / MAC</td><td>The device's network and hardware addresses.</td></tr>
+  <tr><td>Manufacturer</td><td>Looked up from the MAC address. <em>Private (randomised MAC)</em> means the device (usually a phone or recent Windows PC) hides its real hardware ID on purpose.</td></tr>
+  <tr><td>Hostname</td><td>The device's network name, from DNS or Windows name resolution. Blank if it does not advertise one.</td></tr>
+  <tr><td>Likely OS</td><td>Nmap's best guess with a confidence percentage. Without Administrator rights it is inferred from service banners only and labelled as such.</td></tr>
+  <tr><td>Open ports</td><td>Port number and protocol, state, service name, and product/version when detectable.</td></tr>
+  <tr><td>Web page</td><td>If a device has an open web port (HTTP/HTTPS), its card shows a clickable link such as <code>http://192.168.1.1</code>, and the port table has a link icon next to that port. Clicking opens the device's own web page (router admin, printer, camera...) in a new tab.</td></tr>
+</table>
+<p>Use the <strong>filter box</strong> to search by anything (for example <code>ssh</code>, <code>Apple</code> or <code>.42</code>). <strong>Export JSON</strong> saves the full results to a file.</p>
+<p>Device badges: <em>Queued</em> (waiting), <em>Inspecting</em> (Nmap running), <em>Done</em>, <em>Failed</em> (see the message on the card).</p>
+
+<h2 id="limits">7. Limits &amp; safety rules</h2>
+<ul>
+  <li>Only <strong>private</strong> address ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x) can be scanned, and nothing larger than a <code>/16</code>.</li>
+  <li>ARP only works on your <strong>local network segment</strong>. For other private subnets the app falls back to a ping sweep, which may miss devices that block pings and will not show MAC addresses.</li>
+  <li>The PC running the scan does not appear in its own ARP results.</li>
+  <li>Devices with firewalls may show few or no open ports. That is normal.</li>
+  <li>The dashboard only listens on <code>127.0.0.1</code> and cannot be reached from other machines.</li>
+</ul>
+
+<h2 id="trouble">8. Troubleshooting</h2>
+<table>
+  <tr><th>Problem</th><th>Fix</th></tr>
+  <tr><td>"Not elevated" badge in the header</td><td>Close the app, then start it again and accept the Administrator prompt.</td></tr>
+  <tr><td>Warning: Npcap not found / ARP discovery failed</td><td>Install Npcap from npcap.com, then restart the app.</td></tr>
+  <tr><td>"nmap not found" badge</td><td>Make sure the <code>nmap</code> folder sits next to the exe (and contains <code>nmap.exe</code>), or install Nmap from nmap.org.</td></tr>
+  <tr><td>No devices found</td><td>Check the range matches your network (run <code>ipconfig</code> and look at your IPv4 address and subnet mask). VPNs and virtual adapters can send discovery out the wrong interface - disconnect the VPN and retry.</td></tr>
+  <tr><td>Windows Firewall prompt</td><td>The app only listens locally; you can click Cancel on the "allow access" dialog.</td></tr>
+  <tr><td>Antivirus blocks or deletes the exe</td><td>Unsigned PyInstaller apps and port scanners are commonly flagged. Add an exclusion for the folder if you trust the file.</td></tr>
+  <tr><td>Console says "Fatal error"</td><td>Read the message; the most common cause is no free port. Close other copies of the app.</td></tr>
+  <tr><td>Scan is very slow</td><td>Use Quick depth, or a smaller range. Full scans of many devices take a long time.</td></tr>
+</table>
+
+<h2 id="cli">9. Command-line options</h2>
+<p>Run from a command prompt if you need them:</p>
+<pre><code>NetworkScanner.exe --port 8080        # use another port
+NetworkScanner.exe --no-browser       # don't open the browser automatically
+NetworkScanner.exe --host 0.0.0.0     # listen on all interfaces (NOT recommended: no login)</code></pre>
+<p>Set the environment variable <code>SCANNER_ALLOW_PUBLIC=1</code> to allow scanning non-private ranges, only if you are authorised to scan them.</p>
+
+</div>
+</body>
+</html>
