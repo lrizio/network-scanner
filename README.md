@@ -12,10 +12,10 @@ The ready-to-use package is in [`build/`](build):
 | File | Purpose |
 |------|---------|
 | `NetworkScanner.exe` | The app (Python, Flask, scapy and python-nmap embedded; prompts for Administrator) |
-| `nmap/` | Portable Nmap used by the app - keep it next to the exe |
+| `nmap/` | Not included in the repo - install [Nmap](https://nmap.org/download.html) yourself (the app uses the system install), or run `build.ps1` to bundle your own copy |
 | `USER_GUIDE.html` | Offline user guide (also at `/guide` inside the app) |
 
-Copy the whole `build` folder anywhere, install [Npcap](https://npcap.com) once, double-click
+Install [Nmap](https://nmap.org/download.html) (it also installs Npcap), copy the `build` folder anywhere, double-click
 `NetworkScanner.exe` and accept the UAC prompt. The console prints a clickable link and the
 dashboard opens in your browser.
 
@@ -30,9 +30,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 builds a one-file exe with an Administrator manifest, copies the runtime files of your Nmap install
 into `build\nmap`, and copies the guide. `.buildenv` can be deleted afterwards.
 
-Licensing note: Nmap is released under the [Nmap Public Source License](https://nmap.org/npsl/);
-bundling it is fine for personal/internal use, but redistributing this package to others needs an
-Nmap OEM licence. Npcap is not bundled (its free licence forbids redistribution) - users install it themselves.
+Licensing note: this repo does not redistribute Nmap or Npcap. Nmap is released under the [Nmap Public Source License](https://nmap.org/npsl/); install it from nmap.org. A package you build with `build.ps1` that bundles Nmap is for your own use - redistributing it to others needs an Nmap OEM licence.
 
 ## Running from source
 
@@ -67,3 +65,7 @@ authentication - don't expose it on an untrusted network).
 - **Safety limits:** private (RFC1918) ranges only, nothing larger than a `/16`
   (`SCANNER_ALLOW_PUBLIC=1` lifts the private-only rule).
 - The dashboard page loads Bootstrap from a CDN, so the browser needs internet access.
+
+## License
+
+MIT for this project's own code (see [LICENSE](LICENSE)). Nmap and Npcap have their own licences.
